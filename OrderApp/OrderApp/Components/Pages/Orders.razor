@@ -1,0 +1,214 @@
+﻿@page "/orders"
+@using DataAccess.Entities
+@rendermode InteractiveServer
+@inject HttpClient Http
+
+<h3>Orders</h3>
+
+<div class="mb-3">
+	<button class="btn btn-primary" @onclick="ShowCreateOrderForm">Create Order</button>
+</div>
+
+<div class="row">
+	<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+		@if (!string.IsNullOrEmpty(errorMessage))
+		{
+			<div class="alert alert-danger" role="alert">
+				@errorMessage
+			</div>
+		}
+	</div>
+</div>
+
+@if (orders == null)
+{
+	<p><em>Loading...</em></p>
+}
+else if (showCreateForm)
+{
+	<form @onsubmit="HandleCreateOrder">
+		<div class="row">
+			<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+				<div class="mb-3">
+					<label for="orderName" class="form-label">Name</label>
+					<input @bind="newOrder.Name" type="text" class="form-control" id="orderName" placeholder="Name">
+				</div>
+				<div class="mb-3">
+					<label for="state" class="form-label">State</label>
+					<input @bind="newOrder.State" type="text" class="form-control" id="state" placeholder="State">
+				</div>
+			</div>
+		</div>
+
+		<button type="submit" class="btn btn-success">Submit Order</button>
+	</form>
+}
+else if (showUpdateForm)
+{
+	<form @onsubmit="UpdateOrder">
+		<div class="row">
+			<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+				<div class="mb-3">
+					<label for="orderName" class="form-label">Name</label>
+					<input @bind="editableOrder.Name" type="text" class="form-control" id="orderName" placeholder="Name">
+				</div>
+				<div class="mb-3">
+					<label for="state" class="form-label">State</label>
+					<input @bind="editableOrder.State" type="text" class="form-control" id="state" placeholder="State">
+				</div>
+			</div>
+		</div>
+
+		<button class="btn btn-success" type="submit">Save Changes</button>
+		<button class="btn btn-secondary" @onclick="() => { showUpdateForm = false; }">Cancel</button>
+	</form>
+}
+else
+{
+	<table class="table">
+		<thead>
+			<tr>
+				<th>Id</th>
+				<th>Name</th>
+				<th>State</th>
+				<th>Actions</th>
+			</tr>
+		</thead>
+		<tbody>
+			@foreach (var order in orders)
+			{
+				<tr>
+					<td>@order.Id</td>
+					<td>@order.Name</td>
+					<td>@order.State</td>
+					<td>
+						<button class="btn btn-warning" @onclick="() => BeginUpdateOrder(order.Id)">Update</button>
+						<button class="btn btn-danger" @onclick="() => DeleteOrder(order.Id)">Delete</button>
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+@code {
+	private string errorMessage;
+	private bool showCreateForm = false;
+	private List<Order> orders;
+	private Order newOrder = new Order();
+	private Order editableOrder;
+	private bool showUpdateForm = false;
+
+	protected override async Task OnInitializedAsync()
+	{
+		try
+		{
+			var response = await Http.GetFromJsonAsync<Response<Order>>("/api/Orders");
+
+			if (response != null && response.Status == 200)
+			{
+				orders = response.Data;
+			}
+		}
+		catch (Exception ex)
+		{
+			errorMessage = $"An error occurred. Please contact system administrator.";
+
+			Console.WriteLine($"Error fetching orders: {ex.Message}");
+		}
+	}
+
+	protected void ShowCreateOrderForm()
+	{
+		errorMessage = "";
+
+		Console.WriteLine("Button clicked"); 
+
+		showCreateForm = true; 
+	}
+
+	protected async Task HandleCreateOrder()
+	{
+		var response = await Http.PostAsJsonAsync("/api/Orders", newOrder);
+
+		if (response.IsSuccessStatusCode)
+		{
+			await OnInitializedAsync();
+
+			showCreateForm = false;
+
+			errorMessage = "";
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+
+			errorMessage = $"An error occurred while creating the window. " +
+					"Please try again or contact system administrator.";
+			
+			Console.WriteLine($"Error creating order: {errorContent}");
+		}
+	}
+
+	private async Task DeleteOrder(int orderId)
+	{
+		var response = await Http.DeleteAsync($"/api/Orders/{orderId}");
+
+		if (response.IsSuccessStatusCode)
+		{
+			errorMessage = "";
+			
+			orders = orders.Where(o => o.Id != orderId).ToList();
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+
+			errorMessage = "This order cannot be deleted because it is currently linked to other records. " +
+				"Please ensure all dependencies are removed before attempting deletion, " +
+				"or contact support for assistance.";
+
+			Console.WriteLine($"Error deleting order: {errorContent}");
+		}
+	}
+
+	private void BeginUpdateOrder(int orderId)
+	{
+		errorMessage = "";
+		
+		editableOrder = orders.FirstOrDefault(o => o.Id == orderId);
+
+		if (editableOrder != null)
+		{
+			showUpdateForm = true;
+
+			errorMessage = null;
+		}
+		else
+		{
+			showUpdateForm = true;
+		}
+	}
+
+	private async Task UpdateOrder()
+	{
+		var response = await Http.PutAsJsonAsync($"/api/Orders/{editableOrder.Id}", editableOrder);
+
+		if (response.IsSuccessStatusCode)
+		{
+			errorMessage = "";
+			
+			showUpdateForm = false;
+
+			await OnInitializedAsync();
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+
+			errorMessage = $"An error occurred while updating the order. " +
+				"Please try again or contact system administrator.";
+			
+			Console.WriteLine($"Error updating order: {errorContent}");
+		}
+	}
+}

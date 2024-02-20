@@ -1,0 +1,236 @@
+﻿@page "/windows"
+@using DataAccess.Entities
+@rendermode InteractiveServer
+@inject HttpClient Http
+
+<h3>Windows</h3>
+
+<div class="mb-3">
+	<button class="btn btn-primary" @onclick="ShowCreateWindowForm">Create Window</button>
+</div>
+
+<div class="row">
+	<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+		@if (!string.IsNullOrEmpty(errorMessage))
+		{
+			<div class="alert alert-danger" role="alert">
+				@errorMessage
+			</div>
+		}
+	</div>
+</div>
+
+@if (windows == null)
+{
+	<p><em>Loading...</em></p>
+}
+else if (showCreateForm)
+{
+	<form @onsubmit="HandleCreateWindow">
+		<div class="row">
+			<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+				<div class="mb-3">
+					<label for="orderId" class="form-label">Order Id</label>
+					<input type="number" class="form-control" id="orderId" @bind="newWindow.OrderId" placeholder="Order Id" step="1" />
+				</div>
+				<div class="mb-3">
+					<label for="name" class="form-label">Name</label>
+					<input type="text" class="form-control" id="name" @bind="newWindow.Name" placeholder="Name" />
+				</div>
+				<div class="mb-3">
+					<label for="quantityOfWindows" class="form-label">Quantity Of Windows</label>
+					<input type="number" class="form-control" id="quantityOfWindows" @bind="newWindow.QuantityOfWindows" placeholder="Quantity Of Windows" step="1" />
+				</div>
+				<div class="mb-3">
+					<label for="totalSubElements" class="form-label">Total SubElements</label>
+					<input type="number" class="form-control" id="totalSubElements" @bind="newWindow.TotalSubElements" placeholder="Total SubElements" step="1" />
+				</div>
+			</div>
+		</div>
+
+		<button type="submit" class="btn btn-success">Submit Window</button>
+	</form>
+}
+else if (showUpdateForm)
+{
+	<form @onsubmit="UpdateWindow">
+		<div class="row">
+			<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+				<div class="mb-3">
+					<label for="orderId" class="form-label">Order Id</label>
+					<input type="number" class="form-control" id="orderId" @bind="editableWindow.OrderId" placeholder="Order Id" step="1" />
+				</div>
+				<div class="mb-3">
+					<label for="name" class="form-label">Name</label>
+					<input type="text" class="form-control" id="name" @bind="editableWindow.Name" placeholder="Name" />
+				</div>
+				<div class="mb-3">
+					<label for="quantityOfWindows" class="form-label">Quantity Of Windows</label>
+					<input type="number" class="form-control" id="quantityOfWindows" @bind="editableWindow.QuantityOfWindows" placeholder="Quantity Of Windows" step="1" />
+				</div>
+				<div class="mb-3">
+					<label for="totalSubElements" class="form-label">Total SubElements</label>
+					<input type="number" class="form-control" id="totalSubElements" @bind="editableWindow.TotalSubElements" placeholder="Total SubElements" step="1" />
+				</div>
+			</div>
+		</div>
+
+		<button class="btn btn-success" type="submit">Save Changes</button>
+		<button class="btn btn-secondary" @onclick="() => { showUpdateForm = false; }">Cancel</button>
+	</form>
+}
+else
+{
+	<table class="table">
+		<thead>
+			<tr>
+				<th>Id</th>
+				<th>Order Id</th>
+				<th>Name</th>
+				<th>Quantity Of Windows</th>
+				<th>Total SubElements</th>
+				<th>Actions</th>
+			</tr>
+		</thead>
+		<tbody>
+			@foreach (var window in windows)
+			{
+				<tr>
+					<td>@window.Id</td>
+					<td>@window.OrderId</td>
+					<td>@window.Name</td>
+					<td>@window.QuantityOfWindows</td>
+					<td>@window.TotalSubElements</td>
+
+					<td>
+						<button class="btn btn-warning" @onclick="() => BeginUpdateWindow(window.Id)">Update</button>
+						<button class="btn btn-danger" @onclick="() => DeleteWindow(window.Id)">Delete</button>
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+@code {
+	private string errorMessage;
+	private bool showCreateForm = false;
+	private List<Window> windows;
+	private Window newWindow = new Window();
+	private Window editableWindow;
+	private bool showUpdateForm = false;
+
+	protected override async Task OnInitializedAsync()
+	{
+		try
+		{
+			var response = await Http.GetFromJsonAsync<Response<Window>>("/api/Windows");
+
+			if (response != null && response.Status == 200)
+			{
+				windows = response.Data;
+			}
+		}
+		catch (Exception ex)
+		{
+			errorMessage = $"An error occurred. Please contact system administrator.";
+
+			Console.WriteLine($"Error fetching windows: {ex.Message}");
+		}
+	}
+
+	protected void ShowCreateWindowForm()
+	{
+		errorMessage = "";
+
+		Console.WriteLine("Button clicked");
+		
+		showCreateForm = true; 
+	}
+
+	protected async Task HandleCreateWindow()
+	{
+		var response = await Http.PostAsJsonAsync("/api/Windows", newWindow);
+
+		if (response.IsSuccessStatusCode)
+		{
+			await OnInitializedAsync();
+
+			showCreateForm = false;
+
+			errorMessage = "";
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+
+			if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+			{
+				errorMessage = $"The specified Order Id does not exist. Please enter a valid Order Id.";
+			}
+			else
+			{
+				errorMessage = $"An error occurred while creating the window. " +
+					"Please try again or contact system administrator.";
+			}
+
+			Console.WriteLine($"Error creating window: {errorContent}");
+		}
+	}
+
+	private async Task DeleteWindow(int windowId)
+	{
+		var response = await Http.DeleteAsync($"/api/Windows/{windowId}");
+
+		if (response.IsSuccessStatusCode)
+		{
+			errorMessage = "";
+			
+			windows = windows.Where(w => w.Id != windowId).ToList();
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+
+			errorMessage = "This window cannot be deleted because it is currently linked to other records. " +
+				"Please ensure all dependencies are removed before attempting deletion, " + 
+				"or contact support for assistance.";
+
+			Console.WriteLine($"Error deleting window: {errorContent}");
+		}
+	}
+
+	private void BeginUpdateWindow(int windowId)
+	{
+		errorMessage = "";
+		
+		editableWindow = windows.FirstOrDefault(w => w.Id == windowId);
+
+		if (editableWindow != null)
+		{
+			showUpdateForm = true;
+		}
+	}
+
+	private async Task UpdateWindow()
+	{
+		var response = await Http.PutAsJsonAsync($"/api/Windows/{editableWindow.Id}", editableWindow);
+
+		if (response.IsSuccessStatusCode)
+		{
+			errorMessage = "";
+			
+			showUpdateForm = false;
+
+			await OnInitializedAsync();
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+			
+			errorMessage = $"An error occurred while updating the window. " +
+				"Please try again or contact system administrator.";
+
+			Console.WriteLine($"Error updating window: {errorContent}");
+		}
+	}
+}

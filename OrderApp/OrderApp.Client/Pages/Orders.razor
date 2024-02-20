@@ -1,0 +1,153 @@
+﻿@page "/students"
+@using DataAccess.Entities
+@using OrderApp.Client.Models
+@rendermode InteractiveServer
+@inject HttpClient Http
+
+<h3>Orders</h3>
+
+<button @onclick="ShowCreateOrderForm">Create Order</button>
+
+@if (orders == null)
+{
+	<p><em>Loading...</em></p>
+}
+else if (showCreateForm)
+{
+	<form @onsubmit="HandleCreateOrder">
+		<input type="text" @bind="newOrder.Name" placeholder="Name" />
+		<input type="text" @bind="newOrder.State" placeholder="State" />
+
+		<button type="submit">Submit</button>
+	</form>
+}
+else if (showUpdateForm)
+{
+	<form @onsubmit="UpdateOrder">
+		<input type="text" @bind="editableOrder.Name" placeholder="Name" />
+		<input type="text" @bind="editableOrder.State" placeholder="State" />
+
+		<button type="submit">Save Changes</button>
+		<button @onclick="() => { showUpdateForm = false; }">Cancel</button>
+	</form>
+}
+else
+{
+	<table class="table">
+		<thead>
+			<tr>
+				<th>Id</th>
+				<th>Name</th>
+				<th>State</th>
+				<th>Actions</th>
+			</tr>
+		</thead>
+		<tbody>
+			@foreach (var order in orders)
+			{
+				<tr>
+					<td>@order.Id</td>
+					<td>@order.Name</td>
+					<td>@order.State</td>
+					<td>
+						<button @onclick="() => BeginUpdateOrder(order.Id)">Update</button>
+						<button @onclick="() => DeleteOrder(order.Id)">Delete</button>
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+@code {
+	private bool showCreateForm = false;
+	private List<Order> orders;
+	private Order newOrder = new Order();
+	private Order editableOrder;
+	private bool showUpdateForm = false;
+
+	protected override async Task OnInitializedAsync()
+	{
+		try
+		{
+			var response = await Http.GetFromJsonAsync<Response>("api/Orders");
+			if (response != null && response.Status == 200)
+			{
+				orders = response.Data;
+			}
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Error fetching orders: {ex.Message}");
+		}
+	}
+
+	protected void ShowCreateOrderForm()
+	{
+		Console.WriteLine("Button clicked"); // For server-side console output
+		showCreateForm = true; // Directly set to true for testing
+	}
+
+	protected async Task HandleCreateOrder()
+	{
+		var response = await Http.PostAsJsonAsync("api/Orders", newOrder);
+
+		if (response.IsSuccessStatusCode)
+		{
+			// Refresh the students list
+			await OnInitializedAsync();
+			showCreateForm = false; // Hide the form after submission
+		}
+		else
+		{
+			// Handle the error
+			Console.WriteLine($"Error creating student: {response.ReasonPhrase}");
+		}
+	}
+
+	private async Task DeleteOrder(int orderId)
+	{
+		var response = await Http.DeleteAsync($"api/Orders/{orderId}");
+
+		if (response.IsSuccessStatusCode)
+		{
+			// Refresh the students list
+			orders = orders.Where(s => s.Id != orderId).ToList();
+		}
+		else
+		{
+			// Handle the error
+			Console.WriteLine($"Error deleting student: {response.ReasonPhrase}");
+		}
+	}
+	private void BeginUpdateOrder(int studentId)
+	{
+		// Find the student in the list
+		editableOrder = orders.FirstOrDefault(s => s.Id == studentId);
+
+		// If the student exists, set showUpdateForm to true to show the form
+		if (editableOrder != null)
+		{
+			showUpdateForm = true;
+		}
+	}
+
+	private async Task UpdateOrder()
+	{
+		// Assuming you have a method on your API that accepts a PUT request to update a student
+		var response = await Http.PutAsJsonAsync($"api/Orders/{editableOrder.Id}", editableOrder);
+
+		if (response.IsSuccessStatusCode)
+		{
+			// Hide the update form
+			showUpdateForm = false;
+
+			// Refresh the students list to reflect the updated details
+			await OnInitializedAsync();
+		}
+		else
+		{
+			// Handle the error
+			Console.WriteLine($"Error updating order: {response.ReasonPhrase}");
+		}
+	}
+}

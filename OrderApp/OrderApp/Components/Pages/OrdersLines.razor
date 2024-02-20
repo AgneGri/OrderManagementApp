@@ -1,0 +1,233 @@
+﻿@page "/ordersLines"
+@using DataAccess.Entities
+@using OrderApp.Models.OrdersLines.DTO
+@rendermode InteractiveServer
+@inject HttpClient Http
+
+<h3>Orders Lines</h3>
+
+<div class="mb-3">
+	<button class="btn btn-primary" @onclick="ShowCreateOrderLineForm">Create Order Line</button>
+</div>
+
+<div class="row">
+	<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+		@if (!string.IsNullOrEmpty(errorMessage))
+		{
+			<div class="alert alert-danger" role="alert">
+				@errorMessage
+			</div>
+		}
+	</div>
+</div>
+
+@if (ordersLines == null)
+{
+	<p><em>Loading...</em></p>
+}
+else if (showCreateForm)
+{
+	<form @onsubmit="HandleCreateOrderLine">
+		<div class="row">
+			<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+				<div class="mb-3">
+					<label for="orderId" class="form-label">Order Id</label>
+					<input type="number" class="form-control" id="orderId" @bind="newOrderLine.OrderId" placeholder="Order Id" step="1" />
+				</div>
+				<div class="mb-3">
+					<label for="windowId" class="form-label">Window Id</label>
+					<input type="number" class="form-control" id="subElementId" @bind="newOrderLine.WindowId" placeholder="Window Id" step="1" />
+				</div>
+				<div class="mb-3">
+					<label for="subElementId" class="form-label">SubElement Id</label>
+					<input type="number" class="form-control" id="subElementId" @bind="newOrderLine.SubElementId" placeholder="SubElement Id" step="1" />
+				</div>
+			</div>
+		</div>
+
+		<button type="submit" class="btn btn-success">Submit Order Line</button>
+	</form>
+}
+else if (showUpdateForm)
+{
+	<form @onsubmit="UpdateOrderLine">
+		<div class="row">
+			<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+				<div class="mb-3">
+					<label for="orderId" class="form-label">Order Id</label>
+					<input type="number" class="form-control" id="orderId" @bind="editableOrderLine.OrderId" placeholder="Order Id" step="1" />
+				</div>
+				<div class="mb-3">
+					<label for="subElementId" class="form-label">SubElement Id</label>
+					<input type="number" class="form-control" id="subElementId" @bind="editableOrderLine.SubElementId" placeholder="SubElement Id" step="1" />
+				</div>
+			</div>
+		</div>
+
+		<button class="btn btn-success" type="submit">Save Changes</button>
+		<button class="btn btn-secondary" @onclick="() => { showUpdateForm = false; }">Cancel</button>
+	</form>
+}
+else
+{
+	@foreach (var orderGroup in ordersLines.GroupBy(line => line.OrderId))
+	{
+		var orderInfo = orderGroup.First(); // Assuming all lines in the group share the same order details.
+		<div>
+			<h4>Order: @orderInfo.OrderName (@orderInfo.OrderState)</h4>
+			@foreach (var windowGroup in orderGroup.GroupBy(line => line.WindowId))
+			{
+				var windowInfo = windowGroup.First(); // Assuming all lines in the group share the same window details.
+				<div style="padding-left: 40px;">
+					<h5>Window: @windowInfo.WindowName (Quantity: @windowInfo.WindowQuantityOfWindows, Total SubElements: @windowInfo.WindowTotalSubElements)</h5>
+					<div style="padding-left: 50px;">
+						<div class="table-responsive">
+							<table class="table">
+								<thead>
+									<tr>
+										<th scope="col" class="w-25">SubElement Id</th>
+										<th scope="col" class="w-25">Type</th>
+										<th scope="col" class="w-25">Width</th>
+										<th scope="col" class="w-25">Height</th>
+									</tr>
+								</thead>
+								<tbody>
+									@foreach (var subElement in windowGroup)
+									{
+										<tr>
+											<td>@subElement.SubElementId</td>
+											<td>@subElement.SubElementType</td>
+											<td>@subElement.SubElementWidth</td>
+											<td>@subElement.SubElementHeight</td>
+										</tr>
+									}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+@code {
+	private string errorMessage;
+	private bool showCreateForm = false;
+	private List<OrderLineDto> ordersLines;
+	private OrderLineDto newOrderLine = new OrderLineDto();
+	private OrderLineDto editableOrderLine;
+	private bool showUpdateForm = false;
+
+	protected override async Task OnInitializedAsync()
+	{
+		try
+		{
+			var response = await Http.GetFromJsonAsync<Response<OrderLineDto>>("/api/OrdersLines");
+
+			if (response != null && response.Status == 200)
+			{
+				ordersLines = response.Data;
+			}
+		}
+		catch (Exception ex)
+		{
+			errorMessage = $"An error occurred. Please contact system administrator.";
+
+			Console.WriteLine($"Error fetching ordersLines: {ex.Message}");
+		}
+	}
+
+	protected void ShowCreateOrderLineForm()
+	{
+		errorMessage = "";
+
+		Console.WriteLine("Button clicked"); 
+
+		showCreateForm = true;
+	}
+
+	protected async Task HandleCreateOrderLine()
+	{
+		var response = await Http.PostAsJsonAsync("/api/OrdersLines", newOrderLine);
+
+		if (response.IsSuccessStatusCode)
+		{
+			await OnInitializedAsync();
+
+			showCreateForm = false;
+
+			errorMessage = "";
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+
+			if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+			{
+				errorMessage = $"One or more specified Ids do not exist. Please enter valid values.";
+			}
+			else
+			{
+				errorMessage = $"An error occurred while creating the orderLine. " +
+					"Please try again or contact system administrator.";
+			}
+
+			Console.WriteLine($"Error creating orderLine: {errorContent}");
+		}
+	}
+
+	private async Task DeleteOrderLine(int orderLineId)
+	{
+		var response = await Http.DeleteAsync($"/api/OrdersLines/{orderLineId}");
+
+		if (response.IsSuccessStatusCode)
+		{
+			errorMessage = "";
+			
+			ordersLines = ordersLines.Where(ol => ol.Id != orderLineId).ToList();
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+
+			errorMessage = $"An error occurred while deleting the orderLine. " +
+					"Please try again or contact system administrator.";
+
+			Console.WriteLine($"Error deleting orderLine: {errorContent}");
+		}
+	}
+	private void BeginUpdateOrderLine(int orderLineId)
+	{
+		errorMessage = "";
+		
+		editableOrderLine = ordersLines.FirstOrDefault(ol => ol.Id == orderLineId);
+
+		if (editableOrderLine != null)
+		{
+			showUpdateForm = true;
+		}
+	}
+
+	private async Task UpdateOrderLine()
+	{
+		var response = await Http.PutAsJsonAsync($"/api/OrdersLines/{editableOrderLine.Id}", editableOrderLine);
+
+		if (response.IsSuccessStatusCode)
+		{
+			errorMessage = "";
+		
+			showUpdateForm = false;
+
+			await OnInitializedAsync();
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+
+			errorMessage = $"An error occurred while updating the orderLine. " +
+				"Please try again or contact system administrator.";
+
+			Console.WriteLine($"Error updating orderLine: {errorContent}");
+		}
+	}
+}

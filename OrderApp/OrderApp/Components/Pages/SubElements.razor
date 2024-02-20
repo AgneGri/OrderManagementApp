@@ -1,0 +1,235 @@
+﻿@page "/subElements"
+@using DataAccess.Entities;
+@rendermode InteractiveServer
+@inject HttpClient Http
+
+<h3>SubElements</h3>
+
+<div class="mb-3">
+	<button class="btn btn-primary" @onclick="ShowCreateSubElementForm">Create SubElement</button>
+</div>
+
+<div class="row">
+	<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+		@if (!string.IsNullOrEmpty(errorMessage))
+		{
+			<div class="alert alert-danger" role="alert">
+				@errorMessage
+			</div>
+		}
+	</div>
+</div>
+	
+@if (subElements == null)
+{
+	<p><em>Loading...</em></p>
+}
+else if (showCreateForm)
+{
+	<form @onsubmit="HandleCreateSubElement">
+		<div class="row">
+			<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+				<div class="mb-3">
+					<label for="windowId" class="form-label">Window Id</label>
+					<input type="number" class="form-control" id="windowId" @bind="newSubElement.WindowId" placeholder="Window Id" step="1" />
+				</div>
+				<div class="mb-3">
+					<label for="type" class="form-label">Type</label>
+					<input type="text" class="form-control" id="type" @bind="newSubElement.Type" placeholder="Type" />
+				</div>
+				<div class="mb-3">
+					<label for="width" class="form-label">Width</label>
+					<input type="number" class="form-control" id="width" @bind="newSubElement.Width" placeholder="Width" step="1" />
+				</div>
+				<div class="mb-3">
+					<label for="height" class="form-label">Height</label>
+					<input type="number" class="form-control" id="height" @bind="newSubElement.Height" placeholder="Height" step="1" />
+				</div>
+			</div>
+		</div>
+
+		<button type="submit" class="btn btn-success">Submit SubElement</button>
+	</form>
+}
+else if (showUpdateForm)
+{
+	<form @onsubmit="UpdateSubElement">
+		<div class="row">
+			<div class="col-12 col-md-9 col-lg-6 col-xl-3">
+				<div class="mb-3">
+					<label for="windowId" class="form-label">Window Id</label>
+					<input type="number" class="form-control" id="windowId" @bind="editableSubElement.WindowId" placeholder="Window Id" step="1" />
+				</div>
+				<div class="mb-3">
+					<label for="type" class="form-label">Type</label>
+					<input type="text" class="form-control" id="type" @bind="editableSubElement.Type" placeholder="Type" />
+				</div>
+				<div class="mb-3">
+					<label for="width" class="form-label">Width</label>
+					<input type="number" class="form-control" id="width" @bind="editableSubElement.Width" placeholder="Width" step="1" />
+				</div>
+				<div class="mb-3">
+					<label for="height" class="form-label">Height</label>
+					<input type="number" class="form-control" id="height" @bind="editableSubElement.Height" placeholder="Height" step="1" />
+				</div>
+			</div>
+		</div>
+
+		<button class="btn btn-success" type="submit">Save Changes</button>
+		<button class="btn btn-secondary" @onclick="() => { showUpdateForm = false; }">Cancel</button>
+	</form>
+}
+else
+{
+	<table class="table">
+		<thead>
+			<tr>
+				<th>Id</th>
+				<th>Window Id</th>
+				<th>Type</th>
+				<th>Width</th>
+				<th>Height</th>
+				<th>Actions</th>
+			</tr>
+		</thead>
+		<tbody>
+			@foreach (var subElement in subElements)
+			{
+				<tr>
+					<th>@subElement.Id</th>
+					<th>@subElement.WindowId</th>
+					<th>@subElement.Type</th>
+					<th>@subElement.Width</th>
+					<th>@subElement.Height</th>
+					<td>
+						<button class="btn btn-warning" @onclick="() => BeginUpdateSubElement(subElement.Id)">Update</button>
+						<button class="btn btn-danger" @onclick="() => DeleteSubElement(subElement.Id)">Delete</button>
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+@code {
+	private string errorMessage;
+	private bool showCreateForm = false;
+	private List<SubElement> subElements;
+	private SubElement newSubElement = new SubElement();
+	private SubElement editableSubElement;
+	private bool showUpdateForm = false;
+
+	protected override async Task OnInitializedAsync()
+	{
+		try
+		{
+			var response = await Http.GetFromJsonAsync<Response<SubElement>>("/api/SubElements");
+			
+			if (response != null && response.Status == 200)
+			{
+				subElements = response.Data;
+			}
+		}
+		catch (Exception ex)
+		{
+			errorMessage = $"An error occurred. Please contact system administrator.";
+
+			Console.WriteLine($"Error fetching subElements: {ex.Message}");
+		}
+	}
+
+	protected void ShowCreateSubElementForm()
+	{
+		errorMessage = "";
+
+		Console.WriteLine("Button clicked");
+		
+		showCreateForm = true;
+	}
+
+	protected async Task HandleCreateSubElement()
+	{
+		var response = await Http.PostAsJsonAsync("/api/SubElements", newSubElement);
+
+		if (response.IsSuccessStatusCode)
+		{
+			await OnInitializedAsync();
+			
+			showCreateForm = false;
+
+			errorMessage = "";
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+
+			if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+			{
+				errorMessage = $"The specified Window Id does not exist. Please enter a valid Window Id.";
+			}
+			else
+			{
+				errorMessage = $"An error occurred while creating the subElement. " +
+					"Please try again or contact system administrator.";
+			}
+
+			Console.WriteLine($"Error creating subElement: {errorContent}");
+		}
+	}
+
+	private async Task DeleteSubElement(int subElementId)
+	{
+		var response = await Http.DeleteAsync($"/api/SubElements/{subElementId}");
+
+		if (response.IsSuccessStatusCode)
+		{
+			errorMessage = "";
+			
+			subElements = subElements.Where(s => s.Id != subElementId).ToList();
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+
+			errorMessage = "This subElement cannot be deleted because it is currently linked to other records. " +
+				"Please ensure all dependencies are removed before attempting deletion, " +
+				"or contact support for assistance.";
+
+			Console.WriteLine($"Error deleting subElement: {errorContent}");
+		}
+	}
+
+	private void BeginUpdateSubElement(int subElementId)
+	{
+		errorMessage = "";
+		
+		editableSubElement = subElements.FirstOrDefault(s => s.Id == subElementId);
+		
+		if (editableSubElement != null)
+		{
+			showUpdateForm = true;
+		}
+	}
+
+	private async Task UpdateSubElement()
+	{
+		var response = await Http.PutAsJsonAsync($"/api/SubElements/{editableSubElement.Id}", editableSubElement);
+
+		if (response.IsSuccessStatusCode)
+		{
+			errorMessage = "";
+			
+			showUpdateForm = false;
+		
+			await OnInitializedAsync();
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+
+			errorMessage = $"An error occurred while updating the subElement. " +
+				"Please try again or contact system administrator.";
+
+			Console.WriteLine($"Error updating subElement: {errorContent}");
+		}
+	}
+}
